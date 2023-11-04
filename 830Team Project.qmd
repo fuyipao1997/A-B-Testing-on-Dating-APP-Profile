@@ -1,0 +1,196 @@
+---
+title: "The Influence of Including a Dog in Dating App Profiles on Perceived Attractiveness"
+author: "Claire Cheng, Fuyi Pao, Raj Patel, Syeda Ghazal Qadri, Ziyin Chen"
+format:
+  pdf: 
+    fontsize: small
+  html: default
+output: pdf_document
+---
+
+## Introduction
+
+Digital transformation is happening in many industries. With more dating apps prevailing in the market, finding a romantic partner has never been faster and easier. According to a 2021 report by ResearchAndMarkets, the global dating apps market value is at \$3.24 billion in 2020 and is expected to reach \$9.99 billion by 2027, with a compound annual growth rate of 16.9%. This growth is a representation of several key factors, such as the increasing normalization of meeting people through online platforms, the rise of mobile usage and of course, the pandemic, where the lack of social gatherings omitted finding a partner if not through a platform online.
+
+With the rise in the use of these applications, there have been changes and advancements in their User Experience. In 2012, Tinder introduced the now-widely-adapted "swipe" feature, allowing users to browse for potential matches much more efficiently. Users can simply swipe left or right on photos of other users, indicating whether they were interested in pursuing a match. While it makes dating apps accessible and appealing to a larger audience, it also elevates the importance of having clear and high-quality profile pictures that indicate personalities and interests.
+
+Our experiment aims to look into this further by breaking down what part of the profile picture can make it more appealing, and we do this by determining whether having a dog in the profile picture can increase the likelihood for a male dating app user to get more matches or not.
+
+**Research Question:** Does having a dog in the profile picture increase the likelihood for a male dating app user to get more matches?
+
+**Hypothesis:** Having a dog in the profile picture will increase the likelihood of getting matched for a male dating app user.
+
+```{r setup, include=FALSE,echo=FALSE}
+#Please do not change this
+knitr::opts_chunk$set(echo = FALSE)
+options(scipen = 1, digits = 3, warning = FALSE,message=FALSE)
+
+#Load library
+library(data.table)
+library(ggplot2)
+library(tidyverse)
+library(pwr)
+library(lfe)
+library(modelsummary)
+library(dplyr)
+library(tidyr)
+library(reshape2)
+library(ggstatsplot)
+library(fixest)
+library(ggpubr)
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Load data
+treatment <- fread('treatment_df.csv')
+control <- fread('control_df.csv')
+#Add label to each df
+treatment$treated<-1
+control$treated<-0
+#Combine treatment and contorl df
+all_df<-rbind(treatment,control,fill = TRUE)
+```
+
+### Data Cleaning
+
+We took several steps to clean and prepare the data for further analysis. We first removed incomplete observations(responses from two participants who did not finish the survey). Next, responses that were in "preview" status, intended for testing purposes, were also excluded. To streamline the data, unnecessary columns were dropped, with the first column from each question removed due to the use of hot spot survey. Subsequently, each question was renamed based on the profile name, and dummy variables were created for the bottom like result. "Like" was assigned a value of 1, and "neutral" was assigned a value of 0 for the dummy variables.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#Drop unfinished
+all_df<-all_df[all_df$Progress==100]
+#Drop preview
+all_df<-all_df[all_df$Status=='IP Address']
+#Drop unuseful columns
+all_df<-subset(all_df,select=-c(StartDate,EndDate,IPAddress,Progress,RecordedDate,RecipientLastName,RecipientFirstName,RecipientEmail,ExternalReference,LocationLatitude,LocationLongitude,DistributionChannel,UserLanguage,Q1_1,Q2_1,Q3_1,Q4_1,Q5_1,Q6_1,Q7_1,Q8_1,Q9_1,Q10_1,Q11_1))
+#Rename questions
+colnames(all_df)[8:18] <- c("Alex", "James","Ben","Mark","Tom","Will","John","Jack","Henry","Sam","Chris")
+#Turn like or neutral into dummy variables
+all_df[all_df=="Like"] <- 1
+all_df[all_df=="Neutral"] <- 0
+```
+
+## Methodology
+
+### Procedure
+
+We start to design our experiment by determining which pairs of profile pictures to use from Adobe Stock Images and iStock. We decided to limit our models to male white young adults and utilized Photoshop to ensure we have enough stock images of a man with and without a dog with similar poses. We limit the dog species to small dogs and also made the assurance to maintain consistency for all profile's ages and chose some of the most common names to avoid excludability. We used Qualtrics to create 2 surveys for the control and the treatment group. With Javascript, we programmed a user interface to mimic a dating app that allows the user to select "heart" if interested in creating a match and "cross" otherwise. The control survey contains profile pictures of 11 male white young adults. The treatment survey contains profile pictures of the same people with a dog. We randomized the order of profiles shown and randomly placed surveyees into the control or treatment group. After data collection, we conducted data analysis with regression to determine if having a dog in a male user's profile image has an effect in getting the user more matches.
+
+### Participants
+
+We mainly targeted potential dating app users. We distributed surveys by asking our friends and family members. Participants are asked to complete three questions about their gender, age, and relationship status, which is also the three covariates in this case, followed by the control or treatment group of profile pictures. We distributed both surveys over the span of 6 days and collected 61 observations of control and 67 observations of treatment. To show the distribution of gender, age, and relationship status of participants, we made some visualization.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+library(ggstatsplot)
+
+pie_age <- ggpiestats(all_df,'Age', results.subtitle = F,slice.label='both',perc.k = 1,direction = 1,title = 'Age Distribution Chart')
+pie_gender <- ggpiestats(all_df,'Gender',results.subtitle = F,slice.label = 'both',perc.k = 1,direction = 1,title = 'Gender Distribution Chart')
+pie_relationship <- ggpiestats(all_df,'Relationship',results.subtitle = F,slice.label = 'both',perc.k = 1,direction = 1,title = 'Relationship Status Distribution Chart')
+ggarrange(pie_age, pie_gender,pie_relationship,ncolumn = 1)
+```
+
+### Randomization
+
+We used a random number generator to generate binary numbers to determine if a participant is placed in the control or treatment group. The designated ratio between control and treatment is 1:1, which means 50% control and 50% treatment.
+
+### Pre-Experiment Randomization Check
+
+The prop test for treatment assignment indicates that we cannot reject the null hypothesis that the treatment group is correctly randomized.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+prop.test(all_df[treated == 1, .N],128,0.5)
+```
+
+## Data Analysis
+
+### Overview of profile attractiveness
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#avg_attractiveness
+all_df[, 8:18] <- lapply(all_df[, 8:18], as.numeric)
+avg_attractiveness<-all_df %>%group_by(treated) %>%summarise(avg_alex = mean(Alex,na.rm = TRUE),avg_james = mean(James,na.rm = TRUE),avg_ben = mean(Ben,na.rm = TRUE),avg_mark = mean(Mark,na.rm = TRUE),avg_tom = mean(Tom,na.rm = TRUE),avg_will = mean(Will,na.rm = TRUE),avg_john = mean(John,na.rm = TRUE),avg_jack = mean(Jack,na.rm = TRUE),avg_henry = mean(Henry,na.rm= TRUE),avg_sam = mean(Sam,na.rm = TRUE),avg_chris = mean(Chris,na.rm = TRUE))
+avg_attractiveness<-t(avg_attractiveness)
+avg_attractiveness <- as.data.frame(avg_attractiveness[-1, ])
+colnames(avg_attractiveness) <- c("control", "treatment")
+avg_attractiveness$ATE <- avg_attractiveness$treatment - avg_attractiveness$control
+head(avg_attractiveness,4)
+```
+
+### Estimated Average Treatment Effect
+
+#### Simple Regression
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+merged_df <- melt.data.table(all_df[, list(treated, ResponseId, Relationship,Gender,Age,Alex, James, Ben, Mark, Tom, Will, John, Jack, Henry, Sam, Chris)], id.vars = c("ResponseId", "treated","Age","Gender","Relationship"))
+reg_merged <- feols(value~ treated, data=merged_df, se = 'white')
+modelsummary(reg_merged , type = 'text', stars = T, output = 'markdown',coef_map = c("(Intercept)"="Control","treated" = "ATE"), gof_map = c("nobs", "r.squared"))
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+reg_alex <- feols(Alex~ treated, data=all_df, se = 'white')
+reg_james <- feols(James~ treated, data=all_df, se =  'white')
+reg_ben <- feols(Ben~ treated, data=all_df, se =  'white')
+reg_mark <- feols(Mark~ treated, data=all_df, se =  'white')
+reg_tom <- feols(Tom~ treated, data=all_df, se =  'white')
+reg_will <- feols(Will~ treated, data=all_df, se =  'white')
+reg_john <- feols(John~ treated, data=all_df, se =  'white')
+reg_jack <- feols(Jack~ treated, data=all_df, se = 'white')
+reg_henry <- feols(Henry~ treated, data=all_df, se =  'white')
+reg_sam<- feols(Sam~ treated, data=all_df, se =  'white')
+reg_chris <- feols(Chris~ treated, data=all_df, se =  'white')
+model_original <- list("Alex" = reg_alex,"James" = reg_james, "Ben" = reg_ben,"Mark" = reg_mark, "Tom" = reg_tom,"Will" = reg_will,"John" = reg_john,"Jack" = reg_jack,"Henry" = reg_henry,"Sam" = reg_sam, "Chris" = reg_chris)
+modelsummary(model_original , type = 'text', stars = T, output = 'markdown',coef_map = c("treated" = "ATE"), gof_map = c("nobs", "r.squared")) 
+```
+
+Our team performed an analysis of the average acceptance rate for all 11 profiles, as well as for each individual profile. Simple regressions were used to estimate the average treatment effect (ATE). The results showed that profiles with a dog (treatment) had a significant ATE of 0.273 with a p-value of less than 0.001, indicating strong statistical power. This suggests that, overall, having a dog picture in a dating app profile tend to increase the acceptance rate.
+
+While analyzing each profile in the control and treatment groups, Henry had the highest positive treatment effect of 0.764, which was statistically significant with a p-value of less than 0.001. Eight out of the eleven profiles had a positive ATE, with six of them exhibiting strong statistical power. These findings suggest that, for most profiles, having a dog picture in a dating app profile leads to higher attractiveness. Regarding the negative ATE, our team did not draw a definitive conclusion due to the lack of significant statistical power. Further analysis may be necessary, such as collecting more data or utilizing a different analysis method, to determine if having a dog picture in certain dating app profiles has a negative effect.
+
+#### Conditional treatment effect
+
+Our team hypothesizes that the average treatment effect may vary based on the respondents' "relationship" condition. To test this hypothesis, we aim to examine the conditional treatment effect by "relationship" variable. We categorized the relationship condition into two groups: "single" and "not single", where the "not single" group includes respondents who are "married," "in a relationship," or "not willing to tell".
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#CATE for Single status
+reg_single <- feols(value~ treated, data=merged_df[Relationship=='Single'], se = 'white')
+reg_relationship<- feols(value~ treated, data=merged_df[Relationship!='Single'], se = 'white')
+model_cate <- list("Single" = reg_single,"Relationship" = reg_relationship)
+modelsummary(model_cate , type = 'text', stars = T, output = 'markdown',coef_map = c("treated" = "ATE"), gof_map = c("nobs", "r.squared")) 
+```
+
+The findings were interesting. Participants who were in a relationship had 0.335 treatment effect with significant statistically power, which is higher compared to those who were single with 0.221 treatment effect. One possible explanation for this is that profiles including a dog were perceived as more family-oriented and loyal, which are important traits for relationship surveyees in selecting a partner.
+
+#### Controlling covariate
+
+We used gender, age and relationship status as covariates for more precised results. We did not observe much difference in the results. One potential explanation is that we did not have a demographically diverse enough group of participants, as the majority of participants are female aged between 18 and 24.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+#add covariates:relationship,age,gender
+reg_cov <- feols(value~ treated+Relationship+Age+Gender, data=merged_df, se = 'white')
+modelsummary(reg_cov ,type = 'text',stars = T, output = 'markdown',coef_map = c("treated" = 'ATE'),gof_map = c("nobs", "r.squared"))
+```
+
+## Limitations
+
+While this project ran successfully and helped give us a picture of the likelihood of matches for someone if they have dogs on their profile, we naturally ran into some limitations. The first is that we had participants with limited diversity. A majority of the participants that we had were females and around the same age range. Having more diverse participants will give us results that represent the total population better. Another limitation that could have occurred is external validity. In our survey, we only had profiles of white males with small dogs. Choosing more profile pairs and having larger dogs might give us a better understanding of how effective dogs in profile pictures are. Having more profiles with different races and dogs could be more beneficial for the survey.
+
+We also believe that the Hawthorne effect can also be present here, as we had several surveys that were done in front of us. Survey participants could answer differently, knowing that we were observing their results for the survey. This could lead to some results that are not as truthful. One way to combat this is to eliminate standing near someone while they take the survey. This will make them feel more comfortable about taking a survey and could answer more truthfully. Another bias limitation that could have occurred in our survey is that survey participants could have answered in a society-pleasing way, meaning they could have chosen images that were more acceptable to society rather than answers they felt were better. This is a major problem in many surveys and could be very difficult to prevent. This ultimately can affect the external validity of the results. We do not believe it to be a major problem in our survey as we asked a very neutral question, but it is still possible that it could have occurred.
+
+## Conclusion
+
+In this experiment, our team would like to know if having a pet dog in a dating app profile photo leads to more swipes. For the control group, we had images of males without their pet dogs, and for treatment group, we had the same males with their pet dogs. We used "between-subjects design", so participants were either shown the 11 treatment profiles or all 11 of the control profiles. We calculated profile attractiveness by finding how many 'yes' each profile got. We then ran simple regression on all the profiles to determine the treatment effect and found that profiles with a dog had a significant ATE of 0.273 with strong statistical power, suggesting that, overall, having a pet dog in a dating app profile does increase the acceptance rate.
+
+However, by running simple regression on each profile's treatment effect, we found that for most profiles, having a dog profile leads to higher attractiveness, while for those with a negative and not significant ATE, our group was unable to come up with a concrete conclusion. It is most likely that having more data or a different analysis method could have helped determine if there is a negative effect of having a dog picture on certain profiles.
+
+After learning the estimated treatment effect, we would further test our hypothesis that the ATE may vary based on the respondents' "relationship" condition, we calculated a conditional treatment effect regression to help us with that analysis. The findings were surprising that respondents in a relationship showed a higher treatment effect on each profile compared to those who were single. A possible reason is that profiles including a dog were more family-oriented and loyal, which is what most people in a relationship are looking for.
+
+To further use covariates to increase precision, we add demographic variables, such as gender, age and relationship status as covariates, however, we did not observe much difference in the results. One potential explanation is that we did not have a demographically diverse enough group of participants.
+
+For future studies, we might want to have more survey participants, as it will give us a more accurate result. We would also like to have more than 11 profiles next time to rule out any bias that could have occurred when having fewer profiles.
+
+\newpage
+
+## Appendix
+
+Preview of Survey Form(Left side is treatment; right side is control)
+
+![Alex profile](Alex.png)
